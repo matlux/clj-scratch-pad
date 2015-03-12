@@ -331,15 +331,42 @@
                                   (map-cps fib r identity)))
 
 (time (first (trampoline #(map-cps-tramp (fn [_] 6) (range 6000) (fn [r]
-                                                                   (fn [] (map-cps-tramp fib (do (println r) r) identity)))) )))
-(time (first (trampoline #(map-cps-tramp (fn [_] 6) (range 600000) (fn [r]
+                                                                  (fn [] (map-cps-tramp fib (do (println r) r) identity)))) )))
+
+;;  6000000 = 45 seconds
+(time (first (trampoline #(map-cps-tramp (fn [_] 6) (range 6000000) (fn [r]
                                                             (fn [] (map-cps-tramp fib (do (println r) r) identity)))) )))
 
 
+(def counter 2000)
+
+(defn map-cps-tramp2 [f coll c k]
+  (if (zero? c)
+    (if (do (empty? coll))
+     #(k ())
+     #(map-cps-tramp2 f (rest coll) counter (fn [r]
+                                     (fn [] (k (cons (f (first coll)) r)))) ))
+    (if (do (empty? coll))
+     (k ())
+     (map-cps-tramp2 f (rest coll) (dec c) (fn [r]
+                                            (k (cons (f (first coll)) r))) ))))
+;; 6000000 iter counter 200 = 34 seconds
+(time (first (trampoline #(map-cps-tramp2 (fn [_] 6) (range 6000000) counter (fn [r]
+                                                                  (fn [] (map-cps-tramp2 fib (do (println r) r) counter identity)))) )))
 
 
+;; rubish. It does not scale!!! It takes forever
+(defn map-cps-tramp3 [f coll k]
+  (cond (empty? coll) #(k ())
+        (< (count coll) counter) #(map-direct f coll)
+        :else #(map-cps-tramp3 f (drop counter coll) (fn [r]
+                                               (fn [] (k (concat (map-direct f (take counter coll)) r)))) )))
+
+(concat '(1 2 3) '(4 5 6))
 
 
+(time (first (trampoline #(map-cps-tramp3 (fn [_] 6) (range 6000) (fn [r]
+                                                                  (fn [] (map-cps-tramp3 fib (do (println r) r) identity)))) )))
 )
 
 (comment
